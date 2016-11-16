@@ -1,0 +1,3 @@
+BUILDER: ['lombok.Builder', 'lombok.experimental.Builder', '@Builder']
+SETTER: ['lombok.Setter', '@Setter']
+DATA: ['lombok.Data', '@Data']

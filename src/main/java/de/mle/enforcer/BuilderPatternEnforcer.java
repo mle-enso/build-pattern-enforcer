@@ -33,19 +33,20 @@ public class BuilderPatternEnforcer implements EnforcerRule {
             loadRules();
 
             checkBuilderPatternAbuses(project.getCompileSourceRoots(), log);
+            // TODO: extract method
             if (!errors.isEmpty()) {
                 log.warn("Found builder pattern violations or adjacent errors:");
                 errors.stream().forEach(error -> log.warn(error));
                 throw new EnforcerRuleException("Found builder pattern violations or adjacent errors!");
             }
-
+        // TODO: keep smaller
         } catch (ExpressionEvaluationException e) {
             throw new EnforcerRuleException("Unable to lookup an expression " + e.getLocalizedMessage(), e);
         }
     }
 
     private void loadRules() throws EnforcerRuleException {
-        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory()); // TODO: inline
 
         try {
             String rulesYaml = IOUtils.toString(BuilderPatternEnforcer.class.getResourceAsStream("/de/mle/enforcer/searchPatterns.txt"));
@@ -64,6 +65,7 @@ public class BuilderPatternEnforcer implements EnforcerRule {
         try {
             @SuppressWarnings("unchecked")
             Iterator<File> sourceFiles = FileUtils.iterateFiles(new File(sourceFolder), new String[] { "java" }, true);
+            // TODO: stream iterator
             while (sourceFiles.hasNext()) {
                 checkFile(sourceFiles.next());
             }
@@ -80,10 +82,11 @@ public class BuilderPatternEnforcer implements EnforcerRule {
         boolean hasSetterAnnotation = checkContentByPattern(Pattern.SETTER, content, fileName);
         boolean hasDataAnnotation = checkContentByPattern(Pattern.DATA, content, fileName);
 
+        // TODO: check earlier
         if (!hasBuilderAnnotation)
             return;
         if (hasDataAnnotation || hasSetterAnnotation)
-            errors.add(file.getAbsolutePath());
+            errors.add(file.getAbsolutePath()); // TODO: fileName
     }
 
     private boolean checkContentByPattern(Pattern pattern, String content, String fileName) {
@@ -91,7 +94,7 @@ public class BuilderPatternEnforcer implements EnforcerRule {
                 .filter(rule -> matchesSingleRule(rule, content, fileName))
                 .findAny().isPresent();
     }
-
+    // TODO: inline
     private boolean matchesSingleRule(String rule, String content, String fileName) {
         return content.contains(rule);
     }

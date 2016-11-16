@@ -25,10 +25,12 @@ public class BuilderPatternEnforcerTest {
 	private static final String TARGET_DIR = BuilderPatternEnforcerTest.class.getResource("/").toString();
 
 	@Test
+	// TODO: separate in rule set and file tests
 	public void execute() throws ExpressionEvaluationException, IOException {
 		// given
 		EnforcerRuleHelper helper = mock(EnforcerRuleHelper.class);
 		MavenProject mavenProject = mock(MavenProject.class);
+		// TODO: static fields
 		File rootProjectDir = new File(TARGET_DIR).getParentFile().getParentFile();
 		String sourceDir = rootProjectDir.getPath().replaceFirst(FILE_PROTOCOL, "") + "/src/main/java";
 

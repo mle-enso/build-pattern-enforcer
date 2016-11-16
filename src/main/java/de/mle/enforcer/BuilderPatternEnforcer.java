@@ -76,24 +76,24 @@ public class BuilderPatternEnforcer implements EnforcerRule {
     private void checkFile(File file) throws IOException {
         String fileName = file.getAbsolutePath();
         String content = FileUtils.readFileToString(file);
-        checkContentByPattern(Pattern.BUILDER, content, fileName);
-        checkContentByPattern(Pattern.SETTER, content, fileName);
-        checkContentByPattern(Pattern.DATA, content, fileName);
+        boolean hasBuilderAnnotation = checkContentByPattern(Pattern.BUILDER, content, fileName);
+        boolean hasSetterAnnotation = checkContentByPattern(Pattern.SETTER, content, fileName);
+        boolean hasDataAnnotation = checkContentByPattern(Pattern.DATA, content, fileName);
 
-        //        if (!hasBuilderAnnotation)
-        //            return;
-        //        if (hasDataAnnotation || hasSetterAnnotation)
-        //            errors.add(file.getAbsolutePath());
+        if (!hasBuilderAnnotation)
+            return;
+        if (hasDataAnnotation || hasSetterAnnotation)
+            errors.add(file.getAbsolutePath());
     }
 
-    private void checkContentByPattern(Pattern pattern, String content, String fileName) {
-        rules.get(pattern).stream()
-                .forEach(rule -> checkSingleRule(rule, content, fileName));
+    private boolean checkContentByPattern(Pattern pattern, String content, String fileName) {
+        return rules.get(pattern).stream()
+                .filter(rule -> matchesSingleRule(rule, content, fileName))
+                .findAny().isPresent();
     }
 
-    private void checkSingleRule(String rule, String content, String fileName) {
-        if (content.contains(rule))
-            errors.add(fileName);
+    private boolean matchesSingleRule(String rule, String content, String fileName) {
+        return content.contains(rule);
     }
 
     @Override

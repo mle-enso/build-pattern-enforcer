@@ -1,4 +1,4 @@
-package de.mle;
+package de.mle.patterns.incorrect;
 
 import lombok.Builder;
 import lombok.Setter;

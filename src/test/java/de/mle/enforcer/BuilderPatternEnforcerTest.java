@@ -1,13 +1,16 @@
 package de.mle.enforcer;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -17,48 +20,85 @@ import org.apache.maven.enforcer.rule.api.EnforcerRuleHelper;
 import org.apache.maven.plugin.logging.Log;
 import org.apache.maven.project.MavenProject;
 import org.codehaus.plexus.component.configurator.expression.ExpressionEvaluationException;
+import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
+import org.testng.Assert;
 import org.testng.annotations.Test;
 
 public class BuilderPatternEnforcerTest {
-	private static final String FILE_PROTOCOL = "file:";
-	private BuilderPatternEnforcer enforcer = new BuilderPatternEnforcer();
 	private static final String TARGET_DIR = BuilderPatternEnforcerTest.class.getResource("/").toString();
+	private static final File ROOT_PROJECT_DIR = new File(TARGET_DIR).getParentFile().getParentFile();
+	private static final String PROTOCOL = "file:";
 
 	@Test
-	// TODO: separate in rule set and file tests
-	public void execute() throws ExpressionEvaluationException, IOException {
+	@SuppressWarnings("unchecked")
+	public void checkRuleSet() throws ExpressionEvaluationException, EnforcerRuleException {
 		// given
-		EnforcerRuleHelper helper = mock(EnforcerRuleHelper.class);
-		MavenProject mavenProject = mock(MavenProject.class);
-		// TODO: static fields
-		File rootProjectDir = new File(TARGET_DIR).getParentFile().getParentFile();
-		String sourceDir = rootProjectDir.getPath().replaceFirst(FILE_PROTOCOL, "") + "/src/main/java";
+		BuilderPatternEnforcer enforcer = new BuilderPatternEnforcer();
+		EnforcerRuleHelper helper = initMavenProjectAndAssembleSourcePath("/src/main/java/de/mle/patterns/correct");
+		mockLog(helper);
 
-		when(mavenProject.getCompileSourceRoots()).thenReturn(Arrays.asList(new String[] { sourceDir }));
+		// when
+		enforcer.execute(helper);
 
-		when(helper.evaluate("${project}")).thenReturn(mavenProject);
-		Log log = mock(Log.class);
-		when(helper.getLog()).thenReturn(log);
+		// then
+		Map<Pattern, List<String>> rules = (Map<Pattern, List<String>>) ReflectionTestUtils.getField(enforcer, "rules");
+
+		assertThat(rules.entrySet(), hasSize(3));
+		assertThat(rules.get(Pattern.BUILDER), hasSize(3));
+		assertThat(rules.get(Pattern.SETTER), hasSize(2));
+		assertThat(rules.get(Pattern.DATA), hasSize(2));
+	}
+
+	@Test
+	@SuppressWarnings("unchecked")
+	public void checkPatternMatching() throws ExpressionEvaluationException {
+		// given
+		BuilderPatternEnforcer enforcer = new BuilderPatternEnforcer();
+		EnforcerRuleHelper helper = initMavenProjectAndAssembleSourcePath("/src/main/java/de/mle");
+		Log log = mockLog(helper);
 
 		// when
 		try {
 			enforcer.execute(helper);
+			Assert.fail();
 		} catch (EnforcerRuleException e) {
 			// then
 			assertThat(e.getMessage(), is("Found builder pattern violations or adjacent errors!"));
 		}
 
 		// then
-		Map<Pattern, List<String>> rules = enforcer.rules;
+		List<String> errors = (List<String>) ReflectionTestUtils.getField(enforcer, "errors");
 
-		assertThat(rules.entrySet(), hasSize(3));
-		assertThat(rules.get(Pattern.BUILDER), hasSize(3));
-		assertThat(rules.get(Pattern.SETTER), hasSize(2));
-		assertThat(rules.get(Pattern.DATA), hasSize(2));
+		assertThat(errors, hasSize(2));
 
-		// verify(log).warn("Found builder pattern violations or adjacent
-		// errors:");
-		// verify(log).warn("/home/marco/workspace/build-pattern-enforcer/src/main/java/de/mle/SampleBuilderWithData.java");
-		// verify(log).warn("/home/marco/workspace/build-pattern-enforcer/src/main/java/de/mle/SampleBuilderWithSetter.java");
+		ArgumentCaptor<String> argument = ArgumentCaptor.forClass(String.class);
+		verify(log, times(3)).warn(argument.capture());
+		List<String> allLogMessages = argument.getAllValues();
+
+		// @formatter:off
+		assertThat(allLogMessages, containsInAnyOrder(
+				endsWith("Found builder pattern violations or adjacent errors:"),
+				endsWith("/src/main/java/de/mle/patterns/incorrect/SampleBuilderWithData.java"),
+				endsWith("/src/main/java/de/mle/patterns/incorrect/SampleBuilderWithSetter.java")));
+		// @formatter:on
+	}
+
+	private Log mockLog(EnforcerRuleHelper helper) {
+		Log log = mock(Log.class);
+		when(helper.getLog()).thenReturn(log);
+		return log;
+	}
+
+	private EnforcerRuleHelper initMavenProjectAndAssembleSourcePath(String sourcePathSuffix) throws ExpressionEvaluationException {
+		EnforcerRuleHelper helper = mock(EnforcerRuleHelper.class);
+		MavenProject mavenProject = mock(MavenProject.class);
+
+		String sourceDir = ROOT_PROJECT_DIR.getPath().replaceFirst(PROTOCOL, "") + sourcePathSuffix;
+
+		when(mavenProject.getCompileSourceRoots()).thenReturn(Arrays.asList(new String[] { sourceDir }));
+		when(helper.evaluate("${project}")).thenReturn(mavenProject);
+
+		return helper;
 	}
 }

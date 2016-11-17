@@ -6,6 +6,9 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Spliterator;
+import java.util.Spliterators;
+import java.util.stream.StreamSupport;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
@@ -21,96 +24,91 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 public class BuilderPatternEnforcer implements EnforcerRule {
-    private List<String> errors = new ArrayList<>();
-    Map<Pattern, List<String>> rules;
+	private static final String RULE_SET_FILE = "/de/mle/enforcer/searchPatterns.txt";
+	private List<String> errors = new ArrayList<>();
+	private Map<Pattern, List<String>> rules;
+	private Log log;
 
-    @Override
-    public void execute(EnforcerRuleHelper helper) throws EnforcerRuleException {
-        Log log = helper.getLog();
+	@Override
+	@SuppressWarnings("unchecked")
+	public void execute(EnforcerRuleHelper helper) throws EnforcerRuleException {
+		log = helper.getLog();
+		MavenProject project;
+		try {
+			project = (MavenProject) helper.evaluate("${project}");
+		} catch (ExpressionEvaluationException e) {
+			throw new EnforcerRuleException("Unable to aquire current Maven Project!", e);
+		}
+		loadRules();
 
-        try {
-            MavenProject project = (MavenProject) helper.evaluate("${project}");
-            loadRules();
+		checkBuilderPatternAbuses(project.getCompileSourceRoots());
+		evaluateErrors();
+	}
 
-            checkBuilderPatternAbuses(project.getCompileSourceRoots(), log);
-            // TODO: extract method
-            if (!errors.isEmpty()) {
-                log.warn("Found builder pattern violations or adjacent errors:");
-                errors.stream().forEach(error -> log.warn(error));
-                throw new EnforcerRuleException("Found builder pattern violations or adjacent errors!");
-            }
-        // TODO: keep smaller
-        } catch (ExpressionEvaluationException e) {
-            throw new EnforcerRuleException("Unable to lookup an expression " + e.getLocalizedMessage(), e);
-        }
-    }
+	private void evaluateErrors() throws EnforcerRuleException {
+		if (!errors.isEmpty()) {
+			log.warn("Found builder pattern violations or adjacent errors:");
+			errors.stream().forEach(error -> log.warn(error));
+			throw new EnforcerRuleException("Found builder pattern violations or adjacent errors!");
+		}
+	}
 
-    private void loadRules() throws EnforcerRuleException {
-        ObjectMapper mapper = new ObjectMapper(new YAMLFactory()); // TODO: inline
+	private void loadRules() throws EnforcerRuleException {
+		try {
+			String rulesYaml = IOUtils.toString(BuilderPatternEnforcer.class.getResourceAsStream(RULE_SET_FILE));
+			rules = new ObjectMapper(new YAMLFactory()).readValue(rulesYaml, new TypeReference<Map<Pattern, List<String>>>() {
+			});
+		} catch (IOException e) {
+			throw new EnforcerRuleException("Unable to load rules from file!", e);
+		}
+	}
 
-        try {
-            String rulesYaml = IOUtils.toString(BuilderPatternEnforcer.class.getResourceAsStream("/de/mle/enforcer/searchPatterns.txt"));
-            rules = mapper.readValue(rulesYaml, new TypeReference<Map<Pattern, List<String>>>() {
-            });
-        } catch (IOException e) {
-            throw new EnforcerRuleException("Unable to load rules from file!" + e.getLocalizedMessage(), e);
-        }
-    }
+	private void checkBuilderPatternAbuses(List<String> compileSourceRoots) {
+		compileSourceRoots.stream().forEach(sourceFolder -> checkAllFiles(sourceFolder));
+	}
 
-    private void checkBuilderPatternAbuses(List<String> compileSourceRoots, Log log) {
-        compileSourceRoots.stream().forEach(sourceFolder -> checkAllFiles(sourceFolder, log));
-    }
+	@SuppressWarnings("unchecked")
+	private void checkAllFiles(String sourceFolder) {
+		Iterator<File> sourceFiles = FileUtils.iterateFiles(new File(sourceFolder), new String[] { "java" }, true);
+		StreamSupport.stream(Spliterators.spliteratorUnknownSize(sourceFiles, Spliterator.DISTINCT), true).forEach(file -> checkFile(file));
+	}
 
-    private void checkAllFiles(String sourceFolder, Log log) {
-        try {
-            @SuppressWarnings("unchecked")
-            Iterator<File> sourceFiles = FileUtils.iterateFiles(new File(sourceFolder), new String[] { "java" }, true);
-            // TODO: stream iterator
-            while (sourceFiles.hasNext()) {
-                checkFile(sourceFiles.next());
-            }
-        } catch (IOException e) {
-            log.warn("Error reaading source files from " + sourceFolder);
-            throw new RuntimeException(e);
-        }
-    }
+	private void checkFile(File file) {
+		String content;
+		try {
+			content = FileUtils.readFileToString(file);
+		} catch (IOException e) {
+			log.warn("Error reading source file " + file.getAbsolutePath());
+			throw new RuntimeException(e);
+		}
 
-    private void checkFile(File file) throws IOException {
-        String fileName = file.getAbsolutePath();
-        String content = FileUtils.readFileToString(file);
-        boolean hasBuilderAnnotation = checkContentByPattern(Pattern.BUILDER, content, fileName);
-        boolean hasSetterAnnotation = checkContentByPattern(Pattern.SETTER, content, fileName);
-        boolean hasDataAnnotation = checkContentByPattern(Pattern.DATA, content, fileName);
+		boolean hasBuilderAnnotation = checkContentByPattern(Pattern.BUILDER, content);
+		if (!hasBuilderAnnotation)
+			return;
 
-        // TODO: check earlier
-        if (!hasBuilderAnnotation)
-            return;
-        if (hasDataAnnotation || hasSetterAnnotation)
-            errors.add(file.getAbsolutePath()); // TODO: fileName
-    }
+		boolean hasSetterAnnotation = checkContentByPattern(Pattern.SETTER, content);
+		boolean hasDataAnnotation = checkContentByPattern(Pattern.DATA, content);
 
-    private boolean checkContentByPattern(Pattern pattern, String content, String fileName) {
-        return rules.get(pattern).stream()
-                .filter(rule -> matchesSingleRule(rule, content, fileName))
-                .findAny().isPresent();
-    }
-    // TODO: inline
-    private boolean matchesSingleRule(String rule, String content, String fileName) {
-        return content.contains(rule);
-    }
+		if (hasDataAnnotation || hasSetterAnnotation)
+			errors.add(file.getAbsolutePath());
+	}
 
-    @Override
-    public String getCacheId() {
-        return "";
-    }
+	private boolean checkContentByPattern(Pattern pattern, String content) {
+		return rules.get(pattern).stream().filter(rule -> content.contains(rule)).findAny().isPresent();
+	}
 
-    @Override
-    public boolean isCacheable() {
-        return false;
-    }
+	@Override
+	public String getCacheId() {
+		return "";
+	}
 
-    @Override
-    public boolean isResultValid(EnforcerRule arg0) {
-        return false;
-    }
+	@Override
+	public boolean isCacheable() {
+		return false;
+	}
+
+	@Override
+	public boolean isResultValid(EnforcerRule arg0) {
+		return false;
+	}
 }

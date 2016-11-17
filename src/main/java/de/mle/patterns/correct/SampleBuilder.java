@@ -1,11 +1,11 @@
-package de.mle;
+package de.mle.patterns.correct;
 
 import lombok.Builder;
-import lombok.Data;
+import lombok.Value;
 
 @Builder
-@Data
-public class SampleBuilderWithData {
+@Value
+public class SampleBuilder {
     private String stringField;
     private int intField;
 }

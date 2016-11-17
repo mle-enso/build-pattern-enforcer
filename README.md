@@ -8,7 +8,38 @@ Rule for the [Maven Enforcer Plugin](https://maven.apache.org/enforcer/maven-enf
 Implement the following snippet in your pom.xml
 
 ```xml
-<plugin>
-	…
-</plugin>
+<project>
+	[…]
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-enforcer-plugin</artifactId>
+				<version>1.4.1</version>
+				<dependencies>
+					<dependency>
+						<groupId>de.mle</groupId>
+						<artifactId>build-pattern-enforcer</artifactId>
+						<version>0.0.1</version>
+					</dependency>
+				</dependencies>
+				<configuration>
+					<rules>
+						<myCustomRule implementation="de.mle.enforcer.BuilderPatternEnforcer" />
+					</rules>
+				</configuration>
+				<executions>
+					<execution>
+						<id>enforce-builder-pattern</id>
+						<phase>validate</phase>
+						<goals>
+							<goal>enforce</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+		</build>
+	[…]
+</project>
 ```

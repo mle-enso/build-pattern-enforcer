@@ -25,6 +25,8 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 
 public class BuilderPatternEnforcer implements EnforcerRule {
 	private static final String RULE_SET_FILE = "/de/mle/enforcer/searchPatterns.txt";
+	private static final String UTF_8 = "UTF-8";
+
 	private List<String> errors = new ArrayList<>();
 	private Map<Pattern, List<String>> rules;
 	private Log log;
@@ -55,7 +57,7 @@ public class BuilderPatternEnforcer implements EnforcerRule {
 
 	private void loadRules() throws EnforcerRuleException {
 		try {
-			String rulesYaml = IOUtils.toString(BuilderPatternEnforcer.class.getResourceAsStream(RULE_SET_FILE));
+			String rulesYaml = IOUtils.toString(BuilderPatternEnforcer.class.getResourceAsStream(RULE_SET_FILE), UTF_8);
 			rules = new ObjectMapper(new YAMLFactory()).readValue(rulesYaml, new TypeReference<Map<Pattern, List<String>>>() {
 			});
 		} catch (IOException e) {
@@ -67,7 +69,6 @@ public class BuilderPatternEnforcer implements EnforcerRule {
 		compileSourceRoots.stream().forEach(sourceFolder -> checkAllFiles(sourceFolder));
 	}
 
-	@SuppressWarnings("unchecked")
 	private void checkAllFiles(String sourceFolder) {
 		Iterator<File> sourceFiles = FileUtils.iterateFiles(new File(sourceFolder), new String[] { "java" }, true);
 		StreamSupport.stream(Spliterators.spliteratorUnknownSize(sourceFiles, Spliterator.DISTINCT), true).forEach(file -> checkFile(file));
@@ -76,7 +77,7 @@ public class BuilderPatternEnforcer implements EnforcerRule {
 	private void checkFile(File file) {
 		String content;
 		try {
-			content = FileUtils.readFileToString(file);
+			content = FileUtils.readFileToString(file, UTF_8);
 		} catch (IOException e) {
 			log.warn("Error reading source file " + file.getAbsolutePath());
 			throw new RuntimeException(e);
